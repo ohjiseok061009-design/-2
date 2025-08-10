@@ -1,0 +1,478 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Camera, MapPin, Calendar, Clock, Leaf, Star, Trophy, Info, CheckCircle, AlertTriangle, Recycle } from 'lucide-react';
+
+const EcoSortApp = () => {
+  const [currentView, setCurrentView] = useState('home');
+  const [userLocation, setUserLocation] = useState('대전광역시 서구 도마동');
+  const [earthLevel, setEarthLevel] = useState(1);
+  const [ecoPoints, setEcoPoints] = useState(120);
+  const [dailyStreak, setDailyStreak] = useState(7);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [recognitionResult, setRecognitionResult] = useState(null);
+  const videoRef = useRef(null);
+
+  // 대전 서구 도마동 분리배출 정보
+  const locationData = {
+    city: "대전광역시",
+    district: "서구",
+    dong: "도마동",
+    schedule: {
+      general: "일~목요일 18시 이후",
+      recycle: "화, 목요일",
+      food: "일~목요일 18시 이후"
+    },
+    rules: {
+      noDisposal: "금, 토요일은 모든 쓰레기 배출 금지",
+      location: "내 집 앞 문전배출",
+      contact: "서구청 자원순환과 042-288-3574"
+    }
+  };
+
+  // 배달용기 인식 시뮬레이션 데이터
+  const deliveryContainers = {
+    "치킨박스": {
+      materials: ["종이박스", "기름때", "플라스틱 소스통"],
+      disposal: [
+        { item: "종이박스 (기름 묻음)", method: "일반쓰레기", reason: "기름때가 묻어 재활용 불가" },
+        { item: "플라스틱 소스통", method: "플라스틱 재활용", reason: "깨끗이 씻은 후 분리배출" },
+        { item: "포크/나이프", method: "플라스틱 재활용", reason: "일회용품도 깨끗하면 재활용 가능" }
+      ],
+      tips: "기름기가 많이 묻은 종이는 재활용이 어려워요. 소스통은 반드시 깨끗이 씻어주세요!"
+    },
+    "중국집 용기": {
+      materials: ["플라스틱 용기", "알루미늄 뚜껑", "비닐봉지"],
+      disposal: [
+        { item: "검은 플라스틱 용기", method: "일반쓰레기", reason: "검은색 플라스틱은 재활용 불가" },
+        { item: "알루미늄 뚜껑", method: "캔류 재활용", reason: "깨끗이 씻은 후 분리배출" },
+        { item: "비닐봉지", method: "비닐류 재활용", reason: "음식물 제거 후 분리배출" }
+      ],
+      tips: "검은색 플라스틱은 재활용이 어려워요. 투명하거나 흰색 용기를 선택하는 것이 환경에 좋아요!"
+    }
+  };
+
+  const startCamera = async () => {
+    setCameraActive(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.log("카메라 접근 실패, 시뮬레이션 모드로 진행");
+    }
+  };
+
+  const stopCamera = () => {
+    setCameraActive(false);
+    if (videoRef.current && videoRef.current.srcObject) {
+      const tracks = videoRef.current.srcObject.getTracks();
+      tracks.forEach(track => track.stop());
+    }
+  };
+
+  const simulateRecognition = (itemType) => {
+    const result = deliveryContainers[itemType];
+    setRecognitionResult({
+      item: itemType,
+      confidence: 0.92,
+      ...result
+    });
+    stopCamera();
+    setEcoPoints(prev => prev + 10);
+    
+    // 레벨업 체크
+    if (ecoPoints + 10 >= earthLevel * 100) {
+      setEarthLevel(prev => prev + 1);
+    }
+  };
+
+  const getTodayDisposal = () => {
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0: 일요일, 1: 월요일, ...
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    const currentDay = days[dayOfWeek];
+    
+    if (dayOfWeek === 5 || dayOfWeek === 6) { // 금, 토
+      return { canDispose: false, message: "금, 토요일은 모든 쓰레기 배출 금지일입니다" };
+    }
+    
+    const canRecycle = dayOfWeek === 2 || dayOfWeek === 4; // 화, 목
+    return { 
+      canDispose: true, 
+      currentDay,
+      canRecycle,
+      message: canRecycle ? "오늘은 재활용품 배출 가능일입니다!" : "오늘은 일반/음식물쓰레기 배출 가능일입니다"
+    };
+  };
+
+  const renderHome = () => (
+    <div className="space-y-6">
+      {/* 지구 키우기 게임 */}
+      <div className="bg-gradient-to-br from-green-400 to-blue-500 rounded-2xl p-6 text-white">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-bold">나의 지구</h2>
+            <p className="opacity-90">Level {earthLevel}</p>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold">{ecoPoints}P</div>
+            <div className="text-sm opacity-90">{dailyStreak}일 연속</div>
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-center mb-4">
+          <div className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl ${
+            earthLevel >= 3 ? 'bg-green-300' : earthLevel >= 2 ? 'bg-yellow-300' : 'bg-gray-300'
+          }`}>
+            🌍
+          </div>
+        </div>
+        
+        <div className="w-full bg-white/20 rounded-full h-2 mb-2">
+          <div 
+            className="bg-white h-2 rounded-full transition-all duration-500"
+            style={{ width: `${(ecoPoints % 100)}%` }}
+          ></div>
+        </div>
+        <p className="text-center text-sm opacity-90">
+          다음 레벨까지 {100 - (ecoPoints % 100)}P
+        </p>
+      </div>
+
+      {/* 오늘의 배출 정보 */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border">
+        <div className="flex items-center gap-2 mb-3">
+          <Calendar className="w-5 h-5 text-blue-500" />
+          <h3 className="font-semibold">오늘의 배출 안내</h3>
+        </div>
+        
+        {(() => {
+          const disposal = getTodayDisposal();
+          return (
+            <div className="space-y-2">
+              <div className={`p-3 rounded-lg ${disposal.canDispose ? 'bg-green-50' : 'bg-red-50'}`}>
+                <div className="flex items-center gap-2">
+                  {disposal.canDispose ? 
+                    <CheckCircle className="w-4 h-4 text-green-600" /> : 
+                    <AlertTriangle className="w-4 h-4 text-red-600" />
+                  }
+                  <span className={`font-medium ${disposal.canDispose ? 'text-green-800' : 'text-red-800'}`}>
+                    {disposal.message}
+                  </span>
+                </div>
+              </div>
+              
+              {disposal.canDispose && (
+                <div className="text-sm text-gray-600 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    <span>배출시간: 저녁 6시 이후</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4" />
+                    <span>배출장소: 내 집 앞 문전배출</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* 카메라 인식 버튼 */}
+      <button
+        onClick={() => setCurrentView('camera')}
+        className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 shadow-lg"
+      >
+        <Camera className="w-6 h-6" />
+        분리배출 방법 알아보기
+      </button>
+
+      {/* 퀵 메뉴 */}
+      <div className="grid grid-cols-2 gap-4">
+        <button 
+          onClick={() => setCurrentView('schedule')}
+          className="bg-white p-4 rounded-xl shadow-sm border flex flex-col items-center gap-2"
+        >
+          <Calendar className="w-6 h-6 text-blue-500" />
+          <span className="text-sm font-medium">배출 일정</span>
+        </button>
+        <button 
+          onClick={() => setCurrentView('guide')}
+          className="bg-white p-4 rounded-xl shadow-sm border flex flex-col items-center gap-2"
+        >
+          <Info className="w-6 h-6 text-purple-500" />
+          <span className="text-sm font-medium">분리배출 가이드</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderCamera = () => (
+    <div className="space-y-4">
+      <div className="text-center">
+        <h2 className="text-xl font-bold mb-2">분리배출 방법 인식</h2>
+        <p className="text-gray-600">물건을 카메라에 비춰보세요</p>
+      </div>
+
+      {!cameraActive ? (
+        <div className="space-y-4">
+          <div className="bg-gray-100 rounded-xl p-8 text-center">
+            <Camera className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-600 mb-4">카메라를 시작하려면 버튼을 눌러주세요</p>
+            <button
+              onClick={startCamera}
+              className="bg-green-500 text-white px-6 py-3 rounded-lg font-semibold"
+            >
+              카메라 시작
+            </button>
+          </div>
+          
+          {/* 시범용 버튼들 */}
+          <div className="bg-blue-50 p-4 rounded-xl">
+            <h3 className="font-semibold mb-3">시범 인식해보기:</h3>
+            <div className="space-y-2">
+              <button
+                onClick={() => simulateRecognition('치킨박스')}
+                className="w-full bg-white border border-blue-200 p-3 rounded-lg text-left hover:bg-blue-50"
+              >
+                🍗 치킨박스 인식해보기
+              </button>
+              <button
+                onClick={() => simulateRecognition('중국집 용기')}
+                className="w-full bg-white border border-blue-200 p-3 rounded-lg text-left hover:bg-blue-50"
+              >
+                🥡 중국집 배달용기 인식해보기
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="relative bg-black rounded-xl overflow-hidden">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              className="w-full h-64 object-cover"
+            />
+            <div className="absolute inset-0 border-2 border-green-500 rounded-xl pointer-events-none"></div>
+            <div className="absolute top-4 left-4 bg-red-500 text-white px-2 py-1 rounded text-sm">
+              🔴 인식 중...
+            </div>
+          </div>
+          
+          <button
+            onClick={stopCamera}
+            className="w-full bg-red-500 text-white py-3 rounded-lg font-semibold"
+          >
+            카메라 중지
+          </button>
+        </div>
+      )}
+
+      {recognitionResult && (
+        <div className="bg-white rounded-xl p-4 border-2 border-green-200">
+          <div className="flex items-center gap-2 mb-3">
+            <CheckCircle className="w-5 h-5 text-green-600" />
+            <h3 className="font-bold text-green-800">인식 완료!</h3>
+            <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">
+              정확도 {Math.round(recognitionResult.confidence * 100)}%
+            </span>
+          </div>
+          
+          <h4 className="font-semibold mb-2">{recognitionResult.item}</h4>
+          
+          <div className="space-y-3">
+            {recognitionResult.disposal.map((item, idx) => (
+              <div key={idx} className="bg-gray-50 p-3 rounded-lg">
+                <div className="font-medium text-sm">{item.item}</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                    item.method.includes('재활용') ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {item.method}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 mt-1">{item.reason}</p>
+              </div>
+            ))}
+          </div>
+          
+          <div className="mt-4 p-3 bg-yellow-50 rounded-lg">
+            <div className="flex items-start gap-2">
+              <Info className="w-4 h-4 text-yellow-600 mt-0.5" />
+              <p className="text-sm text-yellow-800">{recognitionResult.tips}</p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center justify-center gap-2 text-green-600">
+            <Star className="w-5 h-5" />
+            <span className="font-medium">+10 에코포인트 획득!</span>
+          </div>
+          
+          <button
+            onClick={() => setRecognitionResult(null)}
+            className="w-full mt-3 bg-green-500 text-white py-2 rounded-lg font-medium"
+          >
+            다시 인식하기
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderSchedule = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">{userLocation} 배출 일정</h2>
+      
+      <div className="bg-white rounded-xl p-4 shadow-sm border">
+        <div className="grid gap-4">
+          <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+            <div className="flex items-center gap-3">
+              <Recycle className="w-5 h-5 text-green-600" />
+              <div>
+                <div className="font-semibold">재활용품</div>
+                <div className="text-sm text-gray-600">화요일, 목요일</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-5 h-5 bg-gray-600 rounded"></div>
+              <div>
+                <div className="font-semibold">일반쓰레기</div>
+                <div className="text-sm text-gray-600">일~목요일 18시 이후</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-5 h-5 bg-yellow-600 rounded"></div>
+              <div>
+                <div className="font-semibold">음식물쓰레기</div>
+                <div className="text-sm text-gray-600">일~목요일 18시 이후</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="mt-4 p-3 bg-red-50 rounded-lg">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-600" />
+            <span className="font-medium text-red-800">금, 토요일 배출 금지</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-blue-50 p-4 rounded-xl">
+        <h3 className="font-semibold mb-2">연락처</h3>
+        <p className="text-sm">{locationData.rules.contact}</p>
+      </div>
+    </div>
+  );
+
+  const renderGuide = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">분리배출 가이드</h2>
+      
+      <div className="space-y-3">
+        <div className="bg-white rounded-xl p-4 border">
+          <h3 className="font-semibold mb-2 text-green-700">♻️ 플라스틱류</h3>
+          <ul className="text-sm text-gray-600 space-y-1">
+            <li>• 내용물을 깨끗이 비우고 헹군 후 배출</li>
+            <li>• 라벨과 뚜껑은 제거</li>
+            <li>• 투명 PET병은 투명/반투명 봉투에 배출</li>
+          </ul>
+        </div>
+        
+        <div className="bg-white rounded-xl p-4 border">
+          <h3 className="font-semibold mb-2 text-blue-700">📄 종이류</h3>
+          <ul className="text-sm text-gray-600 space-y-1">
+            <li>• 비닐코팅지, 기름묻은 종이는 일반쓰레기</li>
+            <li>• 테이프, 스프링 등은 제거 후 배출</li>
+            <li>• 신문지, 잡지, 골판지 별도 분리</li>
+          </ul>
+        </div>
+        
+        <div className="bg-white rounded-xl p-4 border">
+          <h3 className="font-semibold mb-2 text-gray-700">🥫 캔·병류</h3>
+          <ul className="text-sm text-gray-600 space-y-1">
+            <li>• 내용물 제거 후 물로 헹구어 배출</li>
+            <li>• 유리병은 색상별로 분리 가능시 구분 배출</li>
+            <li>• 뚜껑은 따로 분리하여 배출</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* 상단 네비게이션 */}
+      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
+        <div className="max-w-md mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            {currentView !== 'home' && (
+              <button
+                onClick={() => setCurrentView('home')}
+                className="text-blue-600 font-medium"
+              >
+                ← 홈
+              </button>
+            )}
+            <div className="flex items-center gap-2">
+              <Leaf className="w-6 h-6 text-green-600" />
+              <span className="font-bold text-lg">에코소팅</span>
+            </div>
+            <div className="flex items-center gap-1 text-sm">
+              <MapPin className="w-4 h-4 text-gray-500" />
+              <span className="text-gray-600">도마동</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 메인 컨텐츠 */}
+      <div className="max-w-md mx-auto p-4">
+        {currentView === 'home' && renderHome()}
+        {currentView === 'camera' && renderCamera()}
+        {currentView === 'schedule' && renderSchedule()}
+        {currentView === 'guide' && renderGuide()}
+      </div>
+
+      {/* 하단 네비게이션 */}
+      <div className="bg-white border-t fixed bottom-0 left-0 right-0">
+        <div className="max-w-md mx-auto px-4 py-2">
+          <div className="grid grid-cols-4 gap-1">
+            {[
+              { id: 'home', icon: Leaf, label: '홈' },
+              { id: 'camera', icon: Camera, label: '인식' },
+              { id: 'schedule', icon: Calendar, label: '일정' },
+              { id: 'guide', icon: Info, label: '가이드' }
+            ].map(item => (
+              <button
+                key={item.id}
+                onClick={() => setCurrentView(item.id)}
+                className={`flex flex-col items-center py-2 px-1 rounded-lg ${
+                  currentView === item.id 
+                    ? 'text-green-600 bg-green-50' 
+                    : 'text-gray-600'
+                }`}
+              >
+                <item.icon className="w-5 h-5" />
+                <span className="text-xs mt-1">{item.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default EcoSortApp;
